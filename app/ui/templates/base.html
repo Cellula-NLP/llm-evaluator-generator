@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}Evaluator-Generator{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <nav>
+    <a href="/ui/ingest">Ingest</a>
+    <a href="/ui/sources">Sources</a>
+    <a href="/ui/ask">Ask</a>
+    <a href="/ui/health">Health</a>
+  </nav>
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

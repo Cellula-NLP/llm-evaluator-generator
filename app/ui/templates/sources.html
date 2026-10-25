@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Sources</h1>
+{% if sources %}
+<table>
+  <thead>
+    <tr><th>Name</th><th>Kind</th><th>Chunks</th><th>Bytes</th><th>Status</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for s in sources %}
+    <tr>
+      <td>{{ s.name }}</td>
+      <td>{{ s.kind }}</td>
+      <td>{{ s.chunks }}</td>
+      <td>{{ s.bytes }}</td>
+      <td>{{ s.status }}</td>
+      <td>
+        <button hx-delete="/api/sources/{{ s.source_id }}"
+                hx-confirm="Delete this source?"
+                hx-swap="none"
+                hx-on::after-request="location.reload()">Delete</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No sources yet. <a href="/ui/ingest">Ingest some</a>.</p>
+{% endif %}
+{% endblock %}

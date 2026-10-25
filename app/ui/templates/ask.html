@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Ask</h1>
+<form id="ask-form">
+  <textarea name="question" rows="3" placeholder="Ask a question..." required></textarea>
+  <button type="submit">Ask</button>
+</form>
+
+<div id="answer"></div>
+<div id="inspector"></div>
+
+<script>
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+document.getElementById('ask-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  document.getElementById('answer').innerHTML = '<em>Thinking…</em>';
+  document.getElementById('inspector').innerHTML = '';
+
+  const res = await fetch('/api/query', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ question: e.target.question.value })
+  });
+  const data = await res.json();
+
+  const ans = document.getElementById('answer');
+  ans.innerHTML = '';
+
+  const p = document.createElement('p');
+  p.textContent = data.answer;
+  ans.appendChild(p);
+
+  const tags = [];
+  if (data.refusal) tags.push('refusal');
+  tags.push(data.validated ? 'validated' : 'NOT validated');
+  if (data.grounded) tags.push('grounded');
+  if (data.cache_hit) tags.push('cache-hit');
+  tags.push('iterations: ' + data.iterations);
+
+  const badges = document.createElement('div');
+  badges.className = 'badges';
+  badges.textContent = tags.join(' | ');
+  ans.appendChild(badges);
+
+  if (data.warning) {
+    const w = document.createElement('p');
+    w.className = 'warning';
+    w.textContent = '⚠ ' + data.warning;
+    ans.appendChild(w);
+  }
+
+  const ins = document.getElementById('inspector');
+  ins.innerHTML = '<h2>Loop Inspector</h2>';
+  (data.trace || []).forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'iteration';
+    const ev = t.evaluation;
+    card.innerHTML = `
+      <h3>Iteration ${t.iteration}</h3>
+      <p><strong>Answer:</strong> ${esc(t.answer)}</p>
+      ${ev ? `
+        <p><strong>Verdict:</strong> ${ev.is_acceptable ? '✅ acceptable' : '❌ needs improvement'}</p>
+        <p>Scores — accuracy ${ev.accuracy}/5 · relevance ${ev.relevance}/5 · completeness ${ev.completeness}/5 · consistency ${ev.consistency_with_sources}/5</p>
+        <p>Grounded: ${ev.grounded}</p>
+        ${ev.unsupported_claims?.length ? '<p>Unsupported claims: ' + esc(ev.unsupported_claims.join('; ')) + '</p>' : ''}
+      ` : ''}
+      ${t.feedback ? `<p><strong>Feedback:</strong> ${esc(t.feedback)}</p>` : ''}
+    `;
+    ins.appendChild(card);
+  });
+});
+</script>
+{% endblock %}

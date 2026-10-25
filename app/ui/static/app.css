@@ -1,0 +1,16 @@
+body { font-family: system-ui, -apple-system, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+nav { border-bottom: 1px solid #ddd; padding-bottom: 0.75rem; margin-bottom: 1.5rem; }
+nav a { margin-right: 1rem; color: #0366d6; text-decoration: none; }
+nav a:hover { text-decoration: underline; }
+table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+th, td { padding: 0.5rem; border-bottom: 1px solid #ddd; text-align: left; }
+form { margin: 1rem 0; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+textarea { width: 100%; }
+textarea, input, select, button { font: inherit; padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; }
+button { background: #0366d6; color: white; border-color: #0366d6; cursor: pointer; }
+button:hover { background: #0250a8; }
+pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; border-radius: 4px; font-size: 0.9rem; }
+.iteration { border: 1px solid #ddd; padding: 1rem; margin: 0.75rem 0; border-radius: 6px; background: #fafafa; }
+.iteration h3 { margin-top: 0; }
+.badges { margin-top: 0.75rem; color: #555; font-size: 0.9rem; padding: 0.4rem 0; border-top: 1px dashed #ccc; }
+.warning { color: #b45309; font-weight: 500; }

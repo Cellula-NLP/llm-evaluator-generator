@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Health</h1>
+<ul>
+  <li>Redis: {{ '✅ reachable' if redis_ok else '❌ unreachable' }}</li>
+  <li>Vector store: {{ vector_count }} points</li>
+</ul>
+{% endblock %}
