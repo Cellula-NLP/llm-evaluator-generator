@@ -9,7 +9,19 @@
 <div id="answer"></div>
 <div id="inspector"></div>
 
+<!-- Markdown parser and sanitizer -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.9/dist/purify.min.js"></script>
+
 <script>
+// Helper to safely render Markdown
+const renderMd = (text) => {
+  if (!text) return '';
+  const rawHtml = marked.parse(text);
+  return DOMPurify.sanitize(rawHtml);
+};
+
+// Helper for simple text escaping (used for non-markdown fields)
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -18,58 +30,82 @@ document.getElementById('ask-form').addEventListener('submit', async (e) => {
   document.getElementById('answer').innerHTML = '<em>Thinking…</em>';
   document.getElementById('inspector').innerHTML = '';
 
-  const res = await fetch('/api/query', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ question: e.target.question.value })
-  });
-  const data = await res.json();
+  try {
+    const res = await fetch('/api/query', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ question: e.target.question.value })
+    });
 
-  const ans = document.getElementById('answer');
-  ans.innerHTML = '';
+    if (!res.ok) throw new Error("API Error");
+    const data = await res.json();
 
-  const p = document.createElement('p');
-  p.textContent = data.answer;
-  ans.appendChild(p);
+    const ans = document.getElementById('answer');
+    ans.innerHTML = '';
 
-  const tags = [];
-  if (data.refusal) tags.push('refusal');
-  tags.push(data.validated ? 'validated' : 'NOT validated');
-  if (data.grounded) tags.push('grounded');
-  if (data.cache_hit) tags.push('cache-hit');
-  tags.push('iterations: ' + data.iterations);
+    // 1. Render the main answer using Marked.js
+    const p = document.createElement('div');
+    p.innerHTML = renderMd(data.answer);
+    ans.appendChild(p);
 
-  const badges = document.createElement('div');
-  badges.className = 'badges';
-  badges.textContent = tags.join(' | ');
-  ans.appendChild(badges);
+    // 2. Render the badges
+    const tags = [];
+    if (data.refusal) tags.push('refusal');
+    tags.push(data.validated ? 'validated' : 'NOT validated');
+    if (data.grounded) tags.push('grounded');
+    if (data.cache_hit) tags.push('cache-hit');
+    tags.push('iterations: ' + data.iterations);
 
-  if (data.warning) {
-    const w = document.createElement('p');
-    w.className = 'warning';
-    w.textContent = '⚠ ' + data.warning;
-    ans.appendChild(w);
+    const badges = document.createElement('div');
+    badges.className = 'badges';
+    badges.textContent = tags.join(' | ');
+    ans.appendChild(badges);
+
+    // 3. Render warning if loop maxed out
+    if (data.warning) {
+      const w = document.createElement('p');
+      w.className = 'warning';
+      w.textContent = '⚠ ' + data.warning;
+      ans.appendChild(w);
+    }
+
+    // 4. Render the Loop Inspector
+    const ins = document.getElementById('inspector');
+    ins.innerHTML = '<h2>Loop Inspector</h2>';
+
+    (data.trace || []).forEach(t => {
+      const card = document.createElement('div');
+      card.className = 'iteration';
+      const ev = t.evaluation;
+
+      let cardHtml = `<h3>Iteration ${t.iteration}</h3>`;
+
+      // Render the iteration's answer as Markdown
+      cardHtml += `<p><strong>Answer:</strong></p><div class="md-content">${renderMd(t.answer)}</div>`;
+
+      if (ev) {
+        cardHtml += `
+          <p style="margin-top: 1rem;"><strong>Verdict:</strong> ${ev.is_acceptable ? '✅ acceptable' : '❌ needs improvement'}</p>
+          <p>Scores — accuracy ${ev.accuracy}/5 · relevance ${ev.relevance}/5 · completeness ${ev.completeness}/5 · consistency ${ev.consistency_with_sources}/5</p>
+          <p>Grounded: ${ev.grounded}</p>
+          ${ev.unsupported_claims?.length ? '<p>Unsupported claims: ' + esc(ev.unsupported_claims.join('; ')) + '</p>' : ''}
+        `;
+      }
+
+      // Render the Evaluator's feedback as Markdown (it often includes bullet points)
+      if (t.feedback) {
+        cardHtml += `<div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee;">
+                       <strong>Feedback:</strong>
+                       <div class="md-content">${renderMd(t.feedback)}</div>
+                     </div>`;
+      }
+
+      card.innerHTML = cardHtml;
+      ins.appendChild(card);
+    });
+  } catch (error) {
+    document.getElementById('answer').innerHTML = '<p class="warning">⚠ An error occurred connecting to the server.</p>';
   }
-
-  const ins = document.getElementById('inspector');
-  ins.innerHTML = '<h2>Loop Inspector</h2>';
-  (data.trace || []).forEach(t => {
-    const card = document.createElement('div');
-    card.className = 'iteration';
-    const ev = t.evaluation;
-    card.innerHTML = `
-      <h3>Iteration ${t.iteration}</h3>
-      <p><strong>Answer:</strong> ${esc(t.answer)}</p>
-      ${ev ? `
-        <p><strong>Verdict:</strong> ${ev.is_acceptable ? '✅ acceptable' : '❌ needs improvement'}</p>
-        <p>Scores — accuracy ${ev.accuracy}/5 · relevance ${ev.relevance}/5 · completeness ${ev.completeness}/5 · consistency ${ev.consistency_with_sources}/5</p>
-        <p>Grounded: ${ev.grounded}</p>
-        ${ev.unsupported_claims?.length ? '<p>Unsupported claims: ' + esc(ev.unsupported_claims.join('; ')) + '</p>' : ''}
-      ` : ''}
-      ${t.feedback ? `<p><strong>Feedback:</strong> ${esc(t.feedback)}</p>` : ''}
-    `;
-    ins.appendChild(card);
-  });
 });
 </script>
 {% endblock %}

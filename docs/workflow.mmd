@@ -1,0 +1,39 @@
+flowchart TD
+    User([User Question]) --> API[FastAPI Endpoint]
+    API --> Retriever[Retrieval Service]
+
+    subgraph Cache Layer
+        Redis[(Redis Cache)]
+    end
+
+    Retriever <--> Redis
+
+    subgraph External Knowledge
+        Qdrant[(Qdrant Vector DB)]
+    end
+
+    Retriever <--> Qdrant
+
+    Retriever -- "Context (Top-K)" --> LoopStart
+
+    subgraph Evaluator-Generator Loop
+        LoopStart{Context Empty?} -- Yes --> Refusal[Return Refusal]
+        LoopStart -- No --> Gen[Generator LLM]
+
+        Gen --> Eval[Evaluator LLM]
+
+        Eval --> Decision{Acceptable?}
+        Decision -- Yes --> Success[Exit Loop]
+        Decision -- No --> CheckLimit{Iteration < 4?}
+
+        CheckLimit -- Yes --> Feedback[Generate Feedback] --> Gen
+        CheckLimit -- No --> MaxReached[Exit Loop with Warning]
+
+        Gen -.-> GenMem[(Generator Memory)]
+        Eval -.-> EvalMem[(Evaluator Memory)]
+    end
+
+    Success --> Final([Final Answer])
+    MaxReached --> Final
+    Refusal --> Final
+    Final --> API
