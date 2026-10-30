@@ -33,10 +33,10 @@ class Settings(BaseSettings):
     max_audio_size_mb: int = 200
     max_url_redirects: int = 5
     url_timeout_seconds: int = 20
-    chunk_size: int = 700
-    chunk_overlap: int = 100
+    chunk_size: int = 1500
+    chunk_overlap: int = 200
 
-    retrieval_top_k: int = 6
+    retrieval_top_k: int = 10
     max_iterations: int = 4
     whisper_model: str = "base"
 

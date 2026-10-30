@@ -142,7 +142,7 @@ class IngestionService:
         lower = filename.lower()
         if lower.endswith(".pdf"): return "pdf"
         if lower.endswith(".docx"): return "docx"
-        if lower.endswith((".ppt", ".pptx")): return "pptx"
+        if lower.endswith(".pptx"): return "pptx"
         if lower.endswith(".wav"): return "audio"
         if lower.endswith(".txt"): return "txt"
         from app.domains.ingestion.loaders.code_loader import is_code_file

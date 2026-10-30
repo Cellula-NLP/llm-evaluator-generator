@@ -6,49 +6,50 @@
   <button type="submit">Ask</button>
 </form>
 
-<div id="answer"></div>
-<div id="inspector"></div>
+<!-- Container for the chat history -->
+<div id="history" style="margin-top: 2rem;"></div>
 
 <!-- Markdown parser and sanitizer -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.9/dist/purify.min.js"></script>
 
 <script>
-// Helper to safely render Markdown
 const renderMd = (text) => {
   if (!text) return '';
-  const rawHtml = marked.parse(text);
-  return DOMPurify.sanitize(rawHtml);
+  return DOMPurify.sanitize(marked.parse(text));
 };
 
-// Helper for simple text escaping (used for non-markdown fields)
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 document.getElementById('ask-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  document.getElementById('answer').innerHTML = '<em>Thinking…</em>';
-  document.getElementById('inspector').innerHTML = '';
+  const question = e.target.question.value;
+  const historyDiv = document.getElementById('history');
+
+  // Create a new block for this QA pair
+  const block = document.createElement('div');
+  block.className = 'qa-block';
+  block.innerHTML = `
+    <div class="user-q"><strong>Q:</strong> ${esc(question)}</div>
+    <div class="bot-a"><em>Thinking…</em></div>
+  `;
+
+  // Prepend so the newest is at the top
+  historyDiv.prepend(block);
+  e.target.reset();
 
   try {
     const res = await fetch('/api/query', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ question: e.target.question.value })
+      body: JSON.stringify({ question: question })
     });
 
     if (!res.ok) throw new Error("API Error");
     const data = await res.json();
 
-    const ans = document.getElementById('answer');
-    ans.innerHTML = '';
-
-    // 1. Render the main answer using Marked.js
-    const p = document.createElement('div');
-    p.innerHTML = renderMd(data.answer);
-    ans.appendChild(p);
-
-    // 2. Render the badges
+    // Build the Answer section
     const tags = [];
     if (data.refusal) tags.push('refusal');
     tags.push(data.validated ? 'validated' : 'NOT validated');
@@ -56,55 +57,45 @@ document.getElementById('ask-form').addEventListener('submit', async (e) => {
     if (data.cache_hit) tags.push('cache-hit');
     tags.push('iterations: ' + data.iterations);
 
-    const badges = document.createElement('div');
-    badges.className = 'badges';
-    badges.textContent = tags.join(' | ');
-    ans.appendChild(badges);
+    let botHtml = `<div class="md-content">${renderMd(data.answer)}</div>`;
+    botHtml += `<div class="badges">${tags.join(' | ')}</div>`;
 
-    // 3. Render warning if loop maxed out
     if (data.warning) {
-      const w = document.createElement('p');
-      w.className = 'warning';
-      w.textContent = '⚠ ' + data.warning;
-      ans.appendChild(w);
+      botHtml += `<p class="warning">⚠ ${data.warning}</p>`;
     }
 
-    // 4. Render the Loop Inspector
-    const ins = document.getElementById('inspector');
-    ins.innerHTML = '<h2>Loop Inspector</h2>';
+    // Build the Loop Inspector (inside a collapsible <details> tag)
+    let inspectorHtml = '<details><summary>Inspect Evaluator Loop</summary>';
+    inspectorHtml += '<div class="inspector-content">';
 
     (data.trace || []).forEach(t => {
-      const card = document.createElement('div');
-      card.className = 'iteration';
       const ev = t.evaluation;
-
-      let cardHtml = `<h3>Iteration ${t.iteration}</h3>`;
-
-      // Render the iteration's answer as Markdown
-      cardHtml += `<p><strong>Answer:</strong></p><div class="md-content">${renderMd(t.answer)}</div>`;
+      inspectorHtml += `<div class="iteration">`;
+      inspectorHtml += `<h3>Iteration ${t.iteration}</h3>`;
+      inspectorHtml += `<div class="md-content">${renderMd(t.answer)}</div>`;
 
       if (ev) {
-        cardHtml += `
-          <p style="margin-top: 1rem;"><strong>Verdict:</strong> ${ev.is_acceptable ? '✅ acceptable' : '❌ needs improvement'}</p>
+        inspectorHtml += `
+          <p style="margin-top: 1rem;"><strong>Verdict:</strong> ${ev.is_acceptable ? 'Acceptable' : 'Needs improvement'}</p>
           <p>Scores — accuracy ${ev.accuracy}/5 · relevance ${ev.relevance}/5 · completeness ${ev.completeness}/5 · consistency ${ev.consistency_with_sources}/5</p>
           <p>Grounded: ${ev.grounded}</p>
-          ${ev.unsupported_claims?.length ? '<p>Unsupported claims: ' + esc(ev.unsupported_claims.join('; ')) + '</p>' : ''}
         `;
       }
-
-      // Render the Evaluator's feedback as Markdown (it often includes bullet points)
       if (t.feedback) {
-        cardHtml += `<div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee;">
-                       <strong>Feedback:</strong>
-                       <div class="md-content">${renderMd(t.feedback)}</div>
-                     </div>`;
+        inspectorHtml += `<div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee;">
+                            <strong>Feedback:</strong>
+                            <div class="md-content">${renderMd(t.feedback)}</div>
+                          </div>`;
       }
-
-      card.innerHTML = cardHtml;
-      ins.appendChild(card);
+      inspectorHtml += `</div>`;
     });
+    inspectorHtml += '</div></details>';
+
+    // Replace "Thinking..." with the actual answer
+    block.querySelector('.bot-a').innerHTML = botHtml + inspectorHtml;
+
   } catch (error) {
-    document.getElementById('answer').innerHTML = '<p class="warning">⚠ An error occurred connecting to the server.</p>';
+    block.querySelector('.bot-a').innerHTML = '<p class="warning">⚠ An error occurred connecting to the server.</p>';
   }
 });
 </script>

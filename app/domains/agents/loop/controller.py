@@ -11,11 +11,11 @@ log = structlog.get_logger()
 
 class LoopController:
     def __init__(
-        self,
-        generator: GeneratorAgent,
-        evaluator: EvaluatorAgent,
-        retrieval_service,
-        max_iterations: int = 4,
+            self,
+            generator: GeneratorAgent,
+            evaluator: EvaluatorAgent,
+            retrieval_service,
+            max_iterations: int = 4,
     ):
         self._generator = generator
         self._evaluator = evaluator
@@ -23,6 +23,7 @@ class LoopController:
         self._max = max_iterations
 
     async def run(self, session_id: str, question: str, source_ids: list[str] | None = None) -> FinalAnswer:
+        # Initial Retrieval
         retrieval = await self._retrieval.retrieve(question, source_ids=source_ids)
         context = retrieval.as_context()
         state = LoopState(question=question, context=context)
@@ -63,10 +64,22 @@ class LoopController:
                 state.warning = f"Maximum iterations ({self._max}) reached without an acceptable answer"
                 break
 
+            # Dynamic Re-Retrieval based on Feedback
+            # If the answer wasn't acceptable, use the Evaluator's feedback to find the missing information.
+            augmented_query = f"{question} {evaluation.feedback}"
+            new_retrieval = await self._retrieval.retrieve(augmented_query, source_ids=source_ids)
+
+            # Update the context for the next iteration
+            state.context = new_retrieval.as_context()
+            # If the new retrieval found nothing, fallback to original context
+            if not state.context.strip():
+                state.context = context
+            # -----------------------------------------------------------
+
             state.current_answer = await self._generator.generate(
                 session_id=session_id,
                 question=question,
-                context=context,
+                context=state.context,  # Using the newly retrieved context
                 previous_answer=state.current_answer,
                 feedback=evaluation.feedback,
             )

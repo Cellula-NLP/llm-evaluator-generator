@@ -9,9 +9,13 @@ Rules:
    "The provided sources do not contain enough information to answer this question."
 4. Keep answers concise and directly address the question.
 5. When prior feedback is provided, apply it to improve the answer.
+6. Use the "Recent Conversation History" ONLY to understand the user's intent and resolve references (e.g., if the user asks "explain the first one"). You must STILL base your actual answer solely on the External Knowledge context.
 """
 
-GENERATOR_HUMAN = """External Knowledge:
+GENERATOR_HUMAN = """Recent Conversation History:
+{history}
+
+External Knowledge:
 {context}
 
 Question:

@@ -24,10 +24,13 @@ def validate_file_size(content: bytes, kind: str) -> None:
 
 def sniff_and_verify(content: bytes, kind: str) -> None:
     sigs = FILE_SIGNATURES.get(kind)
-    if not sigs:
-        return
-    if not any(content.startswith(sig) for sig in sigs):
-        raise UnsupportedFormatError(f"File content does not match declared '{kind}' format")
+    if sigs:
+        if not any(content.startswith(sig) for sig in sigs):
+            raise UnsupportedFormatError(f"File content does not match declared '{kind}' format")
+    elif kind in ("txt", "code"):
+        # Verify text files don't contain binary null bytes
+        if b"\x00" in content[:1024]:
+            raise UnsupportedFormatError(f"File does not appear to be a valid text/{kind} file")
 
 
 def validate_url(url: str) -> None:

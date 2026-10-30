@@ -15,6 +15,9 @@ class PDFLoader(IDocumentLoader):
         except Exception as exc:
             raise IngestionError(f"Failed to open PDF: {exc}") from exc
 
+        if doc.is_encrypted:
+            raise IngestionError("PDF is password protected and cannot be ingested")
+
         pages: list[LoadedDocument] = []
         for i, page in enumerate(doc):
             text = page.get_text("text").strip()

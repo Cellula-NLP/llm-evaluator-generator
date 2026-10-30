@@ -37,3 +37,36 @@ pre { background: #f5f5f5; padding: 1rem; overflow-x: auto; border-radius: 4px; 
     border-radius: 3px;
     font-size: 0.9em;
 }
+/* Chat History Styles */
+.qa-block {
+    border-bottom: 2px solid #eee;
+    padding: 1.5rem 0;
+}
+.qa-block:last-child {
+    border-bottom: none;
+}
+.user-q {
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+}
+.bot-a {
+    background: #f9f9f9;
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 4px solid #0366d6;
+}
+details {
+    margin-top: 1.5rem;
+}
+summary {
+    cursor: pointer;
+    color: #0366d6;
+    font-weight: 500;
+    user-select: none;
+}
+summary:hover {
+    text-decoration: underline;
+}
+.inspector-content {
+    margin-top: 1rem;
+}
