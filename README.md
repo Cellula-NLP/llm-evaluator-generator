@@ -4,9 +4,9 @@ A self-evaluating question-answering platform built with **FastAPI, LangChain, a
 
 <!-- Replace these paths with your actual frontend screenshots. -->
 <p align="center">
-  <img src="docs/screenshots/ingestion.png" alt="Knowledge ingestion interface" width="32%" />
-  <img src="docs/screenshots/chat.png" alt="Question answering interface" width="32%" />
-  <img src="docs/screenshots/loop-inspector.png" alt="Evaluation loop inspector" width="32%" />
+  <img src="https://i.ibb.co/1tXmKJqH/Screenshot-2026-10-30-at-3-18-57-pm.png" alt="Knowledge ingestion interface" width="32%" />
+  <img src="https://i.ibb.co/WpVvgx7D/Screenshot-2026-10-30-at-3-21-43-pm.png" alt="Question answering interface" width="32%" />
+  <img src="https://i.ibb.co/Cpfm9LKK/Screenshot-2026-10-30-at-3-23-43-pm.png" alt="Evaluation loop inspector" width="32%" />
 </p>
 
 ## Features
@@ -55,7 +55,7 @@ cd <project-directory>
 ### 2. Configure environment variables
 
 ```bash
-cp .env.example .env
+cp .env
 ```
 
 Add your Groq API key and model settings to `.env`:
@@ -66,8 +66,6 @@ GROQ_API_KEY=your_groq_api_key
 GENERATOR_MODEL=openai/gpt-oss-120b
 EVALUATOR_MODEL=openai/gpt-oss-20b
 ```
-
-Do not commit your `.env` file or expose your API key.
 
 ### 3. Start Redis and Qdrant
 
@@ -106,8 +104,3 @@ Open **http://127.0.0.1:8000/ui/ingest**.
 - **Caching:** Redis reduces repeated embedding and retrieval work. Cached data is invalidated when its knowledge source changes.
 - **Execution limit:** The feedback loop stops after 4 iterations to control latency and API usage.
 
-> Evaluation helps improve answer quality, but it does not guarantee factual correctness.
-
-## Notes
-
-For Intel-based Macs, the project pins `numpy<2` and `torch==2.2.2` in `pyproject.toml` for compatibility.
