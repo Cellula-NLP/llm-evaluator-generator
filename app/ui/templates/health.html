@@ -1,8 +1,19 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Health</h1>
-<ul>
-  <li>Redis: {{ 'Online' if redis_ok else 'Offline' }}</li>
-  <li>Vector store: {{ vector_count }} points</li>
-</ul>
+<h1>System Health</h1>
+
+<div class="card" style="display: flex; gap: 2rem;">
+  <div>
+    <h2 style="margin-top: 0; font-size: 1rem; color: var(--gray-500);">Redis Cache</h2>
+    <span class="badge {{ 'badge-teal' if redis_ok else 'badge-red' }}" style="font-size: 1rem; padding: 0.5rem 1rem;">
+      {{ 'Online' if redis_ok else 'Offline' }}
+    </span>
+  </div>
+  <div>
+    <h2 style="margin-top: 0; font-size: 1rem; color: var(--gray-500);">Vector Store</h2>
+    <span class="badge badge-teal" style="font-size: 1rem; padding: 0.5rem 1rem;">
+      {{ vector_count }} points
+    </span>
+  </div>
+</div>
 {% endblock %}

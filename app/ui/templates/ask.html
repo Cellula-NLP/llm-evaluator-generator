@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
-<div style="display: flex; justify-content: space-between; align-items: center;">
-  <h1>Ask</h1>
-  <button id="clear-chat" style="background: #e53e3e; margin: 0;">Clear Chat</button>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <h1 style="margin: 0;">Ask</h1>
+  <button id="clear-chat" class="btn-danger">Clear Chat</button>
 </div>
 
-<form id="ask-form">
+<form id="ask-form" style="margin-bottom: 2rem; flex-direction: column; align-items: stretch;">
   <textarea name="question" rows="3" placeholder="Ask a question..." required></textarea>
-  <button type="submit">Ask</button>
+  <button type="submit" style="margin-top: 0.75rem;">Ask</button>
 </form>
 
-<div id="history" style="margin-top: 2rem;"></div>
+<div id="history"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.9/dist/purify.min.js"></script>
@@ -26,12 +26,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
 
 const historyDiv = document.getElementById('history');
 
-// --- FIX 2: LocalStorage Persistence ---
 function loadHistory() {
   const saved = localStorage.getItem('chat_history');
-  if (saved) {
-    historyDiv.innerHTML = saved;
-  }
+  if (saved) historyDiv.innerHTML = saved;
 }
 
 function saveHistory() {
@@ -43,24 +40,24 @@ document.getElementById('clear-chat').addEventListener('click', () => {
   historyDiv.innerHTML = '';
 });
 
-loadHistory(); // Load on page start
+loadHistory();
 
-// --- FIX 1 & 3: Streaming & Error Handling ---
 document.getElementById('ask-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const question = e.target.question.value;
   e.target.reset();
 
-  // Create UI block
   const block = document.createElement('div');
   block.className = 'qa-block';
+
+  // ADDED dir="auto" to user-q and md-content
   block.innerHTML = `
-    <div class="user-q"><strong>Q:</strong> ${esc(question)}</div>
+    <div class="user-q" dir="auto">Q: ${esc(question)}</div>
     <div class="bot-a">
-      <div class="status" style="color: #666; font-style: italic;">Thinking…</div>
+      <div class="status" style="color: var(--teal-600); font-weight: 500;">Thinking…</div>
       <div class="final-answer" style="display: none;"></div>
       <details style="display: none; margin-top: 1rem;">
-        <summary>Inspect Evaluator Loop</summary>
+        <summary>🔍 Inspect Evaluator Loop</summary>
         <div class="inspector-content"></div>
       </details>
     </div>
@@ -80,11 +77,9 @@ document.getElementById('ask-form').addEventListener('submit', async (e) => {
       body: JSON.stringify({ question: question })
     });
 
-    // FIX 3: Catch backend errors gracefully
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      const msg = errData.error?.message || `Server Error (${res.status})`;
-      throw new Error(msg);
+      throw new Error(errData.error?.message || `Server Error (${res.status})`);
     }
 
     const reader = res.body.getReader();
@@ -109,20 +104,30 @@ document.getElementById('ask-form').addEventListener('submit', async (e) => {
           const t = payload.data;
           const ev = t.evaluation;
 
-          if (!detailsTag.style.display || detailsTag.style.display === 'none') {
+          if (detailsTag.style.display === 'none') {
             detailsTag.style.display = 'block';
+            statusDiv.style.display = 'none';
+            finalDiv.style.display = 'block';
+            finalDiv.innerHTML = `<span style="color:var(--gray-500);font-style:italic;">Synthesizing final answer...</span>`;
           }
 
+          // ADDED dir="auto" to iteration md-content
           let iterHtml = `<div class="iteration">
             <h3>Iteration ${t.iteration}</h3>
-            <div class="md-content">${renderMd(t.answer)}</div>
-            <p style="margin-top: 1rem;"><strong>Verdict:</strong> ${ev.is_acceptable ? 'Acceptable' : 'Needs improvement'}</p>
-            <p>Scores — acc ${ev.accuracy}/5 · rel ${ev.relevance}/5 · comp ${ev.completeness}/5</p>
+            <div class="md-content" dir="auto">${renderMd(t.answer)}</div>
+            <div style="margin-top: 1rem;">
+              <span class="badge ${ev.is_acceptable ? 'badge-teal' : 'badge-red'}">
+                ${ev.is_acceptable ? 'Acceptable' : 'Needs Improvement'}
+              </span>
+              <span class="badge">Acc ${ev.accuracy}/5</span>
+              <span class="badge">Rel ${ev.relevance}/5</span>
+              <span class="badge">Comp ${ev.completeness}/5</span>
+            </div>
           `;
           if (t.feedback) {
-            iterHtml += `<div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee;">
-                           <strong>Feedback:</strong>
-                           <div class="md-content">${renderMd(t.feedback)}</div>
+            iterHtml += `<div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--gray-200);">
+                           <strong style="color: var(--teal-700);">Evaluator Feedback:</strong>
+                           <div class="md-content" dir="auto">${renderMd(t.feedback)}</div>
                          </div>`;
           }
           iterHtml += `</div>`;
@@ -136,20 +141,20 @@ document.getElementById('ask-form').addEventListener('submit', async (e) => {
       }
     }
 
-    // Render Final Answer
     if (finalData) {
       statusDiv.style.display = 'none';
       finalDiv.style.display = 'block';
 
-      const tags = [];
-      if (finalData.refusal) tags.push('refusal');
-      tags.push(finalData.validated ? 'validated' : 'NOT validated');
-      if (finalData.grounded) tags.push('grounded');
-      tags.push('iterations: ' + finalData.iterations);
+      const badges = [];
+      if (finalData.refusal) badges.push(`<span class="badge badge-red">Refusal</span>`);
+      badges.push(`<span class="badge ${finalData.validated ? 'badge-teal' : 'badge-red'}">${finalData.validated ? 'Validated' : 'Not Validated'}</span>`);
+      if (finalData.grounded) badges.push(`<span class="badge badge-teal">Grounded</span>`);
+      badges.push(`<span class="badge">Iterations: ${finalData.iterations}</span>`);
 
-      let html = `<div class="md-content">${renderMd(finalData.answer)}</div>`;
-      html += `<div class="badges">${tags.join(' | ')}</div>`;
-      if (finalData.warning) html += `<p class="warning">⚠ ${finalData.warning}</p>`;
+      // ADDED dir="auto" to final answer
+      let html = `<div class="md-content" dir="auto">${renderMd(finalData.answer)}</div>`;
+      html += `<div class="badges">${badges.join('')}</div>`;
+      if (finalData.warning) html += `<p style="color: var(--red-500); font-size: 0.9rem; margin-top: 1rem;">⚠ ${finalData.warning}</p>`;
 
       finalDiv.innerHTML = html;
       saveHistory();
@@ -158,7 +163,7 @@ document.getElementById('ask-form').addEventListener('submit', async (e) => {
   } catch (error) {
     statusDiv.style.display = 'none';
     finalDiv.style.display = 'block';
-    finalDiv.innerHTML = `<p class="warning" style="color: red; font-weight: bold;">⚠ Error: ${esc(error.message)}</p>`;
+    finalDiv.innerHTML = `<p style="color: var(--red-500); font-weight: 600;">⚠ Error: ${esc(error.message)}</p>`;
     saveHistory();
   }
 });

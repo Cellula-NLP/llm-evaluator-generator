@@ -1,235 +1,113 @@
 # LLM Evaluator-Generator Platform
 
-A self-evaluating Question-Answering platform built with **FastAPI, LangChain, and LCEL**. It features an iterative Generator ↔ Evaluator feedback loop, isolated agent memories, and a Redis caching layer to provide highly grounded, reliable answers over external knowledge sources.
+A self-evaluating question-answering platform built with **FastAPI, LangChain, and LCEL**. It uses a Generator–Evaluator feedback loop to create answers grounded in your uploaded knowledge.
 
-## 🏗️ Architecture & Workflow
+<!-- Replace these paths with your actual frontend screenshots. -->
+<p align="center">
+  <img src="docs/screenshots/ingestion.png" alt="Knowledge ingestion interface" width="32%" />
+  <img src="docs/screenshots/chat.png" alt="Question answering interface" width="32%" />
+  <img src="docs/screenshots/loop-inspector.png" alt="Evaluation loop inspector" width="32%" />
+</p>
 
-The system features two specialized LLM agents:
+## Features
 
-1. **Generator:** Retrieves context and drafts an answer. It strictly refuses to answer if the context is missing.
-2. **Evaluator:** Scores the answer based on accuracy, relevance, completeness, and grounding. If the answer is unsatisfactory, it provides feedback to the Generator for another attempt.
+- **Knowledge ingestion:** PDF, DOCX, TXT, PPTX, source code, web URLs, Wikipedia, and WAV audio.
+- **RAG:** Chunks and indexes external knowledge in Qdrant for semantic retrieval.
+- **Generator:** Answers using retrieved context and refuses when relevant context is unavailable.
+- **Evaluator:** Reviews accuracy, relevance, completeness, and grounding; sends feedback when an answer needs improvement.
+- **Bounded feedback loop:** Up to 4 iterations. If no answer is accepted, the latest answer is returned with a `Not Validated` warning.
+- **Separate memories:** Generator and Evaluator keep independent, session-specific memories.
+- **Redis caching:** Caches embeddings and retrieval results, with invalidation when knowledge sources change.
 
-The evaluation loop is capped at **4 iterations** to prevent infinite execution and excessive API costs. If the maximum number of iterations is reached, the system returns the latest answer with a `Not Validated` warning.
+## Architecture
 
-### Workflow Diagram
+See the [workflow diagram](docs/workflow.mmd) for the system flow.
 
-```mermaid
-flowchart TD
-    User([User Question]) --> API[FastAPI Endpoint]
-    API --> Retriever[Retrieval Service]
+## Tech Stack
 
-    subgraph Cache_Layer["Cache Layer"]
-        Redis[(Redis Cache)]
-    end
-
-    Retriever <--> Redis
-
-    subgraph External_Knowledge["External Knowledge"]
-        Qdrant[(Qdrant Vector DB)]
-    end
-
-    Retriever <--> Qdrant
-    Retriever -- "Context (Top-K)" --> LoopStart
-
-    subgraph Evaluation_Loop["Evaluator-Generator Loop"]
-        LoopStart{Context Empty?}
-
-        LoopStart -- Yes --> Refusal[Return Refusal]
-        LoopStart -- No --> Gen[Generator LLM]
-
-        Gen --> Eval[Evaluator LLM]
-        Eval --> Decision{Acceptable?}
-
-        Decision -- Yes --> Success[Exit Loop]
-        Decision -- No --> CheckLimit{Iteration < 4?}
-
-        CheckLimit -- Yes --> Feedback[Generate Feedback]
-        Feedback --> Gen
-
-        CheckLimit -- No --> MaxReached[Exit Loop with Warning]
-
-        Gen -.-> GenMem[(Generator Memory)]
-        Eval -.-> EvalMem[(Evaluator Memory)]
-    end
-
-    Success --> Final([Final Answer])
-    MaxReached --> Final
-    Refusal --> Final
-```
-
-## 📂 Supported Knowledge Formats
-
-The ingestion pipeline supports:
-
-- **Documents:** PDF, DOCX, TXT, and PPTX.
-- **Source Code:** Any programming language, with AST-aware chunking.
-- **Web:** Standard URLs and Wikipedia pages.
-- **Audio:** WAV files transcribed using `faster-whisper`.
-
-## ⚙️ Tech Stack
-
-| Component | Technology |
+| Area | Technology |
 |---|---|
 | Backend | FastAPI, Uvicorn |
-| Orchestration | LangChain, LCEL, Python State Machine |
-| LLM Provider | Groq |
-| LLM Models | Llama 3.3 70B / GPT-OSS |
-| Vector Database | Qdrant |
-| Caching | Redis |
+| LLMs | Groq (Llama 3.3 70B / GPT-OSS) |
+| Orchestration | LangChain, LCEL |
+| Vector database | Qdrant |
+| Cache | Redis |
 | Frontend | Jinja2, HTMX |
-| Audio Transcription | faster-whisper |
-| Containerization | Docker Compose |
+| Audio transcription | faster-whisper |
+| Deployment | Docker Compose |
 
-## 🚀 Quickstart
+## Quickstart
 
-### 1. Prerequisites
-
-Ensure the following are installed:
+### Requirements
 
 - Python 3.10+
 - Docker Desktop
 - Git
+- A Groq API key
 
-**Intel Mac compatibility:** If you are using an Intel-based Mac, `numpy<2` and `torch==2.2.2` are pinned in `pyproject.toml` to help ensure compatibility.
-
-### 2. Clone the Repository
+### 1. Clone the repository
 
 ```bash
 git clone <repository-url>
 cd <project-directory>
 ```
 
-Replace `<repository-url>` and `<project-directory>` with your repository URL and project directory name.
-
-### 3. Configure Environment Variables
-
-Create your environment file:
+### 2. Configure environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and configure your Groq API key and model settings:
+Add your Groq API key and model settings to `.env`:
 
 ```env
 LLM_PROVIDER=groq
-GROQ_API_KEY=gsk_...
+GROQ_API_KEY=your_groq_api_key
 GENERATOR_MODEL=openai/gpt-oss-120b
 EVALUATOR_MODEL=openai/gpt-oss-20b
 ```
 
-Replace `gsk_...` with your actual Groq API key. Never commit your `.env` file or expose your API key publicly.
+Do not commit your `.env` file or expose your API key.
 
-### 4. Start Infrastructure Services
-
-Start Redis and Qdrant using Docker Compose:
+### 3. Start Redis and Qdrant
 
 ```bash
 docker compose up -d redis qdrant
 ```
 
-### 5. Set Up the Python Environment
-
-Create and activate a virtual environment:
+### 4. Install dependencies
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-```
-
-Install the project and development dependencies:
-
-```bash
 pip install -e ".[dev]"
 ```
 
-### 6. Run the Application
-
-Start the FastAPI development server:
+### 5. Run the app
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-### 7. Access the UI
+Open **http://127.0.0.1:8000/ui/ingest**.
 
-Open the ingestion interface in your browser:
+## Using the Platform
 
-[http://127.0.0.1:8000/ui/ingest](http://127.0.0.1:8000/ui/ingest)
+1. Upload supported files or add a web/Wikipedia URL.
+2. Ask questions about the indexed knowledge.
+3. Use the **Loop Inspector** to review scores, feedback, and iterations.
+4. Check whether the final answer was accepted or returned as `Not Validated`.
 
-From the interface, you can:
+## Design Notes
 
-- **Ingest Knowledge:** Upload supported files or ingest content from URLs.
-- **Ask Questions:** Query the indexed knowledge base.
-- **Inspect Evaluations:** Use the Loop Inspector to examine evaluation scores, feedback, and iterations.
-- **Review Answers:** See the final answer and determine whether it passed evaluation.
+- **Grounding:** If retrieval finds no relevant context, the system returns a refusal without calling the LLM.
+- **Evaluation:** The Evaluator checks the generated answer and provides actionable feedback for another attempt.
+- **Memory isolation:** `GeneratorMemory` and `EvaluatorMemory` are separate and namespaced by `session_id`.
+- **Caching:** Redis reduces repeated embedding and retrieval work. Cached data is invalidated when its knowledge source changes.
+- **Execution limit:** The feedback loop stops after 4 iterations to control latency and API usage.
 
-## 🧠 Design Decisions
+> Evaluation helps improve answer quality, but it does not guarantee factual correctness.
 
-### 1. Generator-Evaluator Feedback Loop
+## Notes
 
-The platform separates answer generation from answer evaluation.
-
-- The Generator retrieves and uses relevant context to produce a grounded answer.
-- The Evaluator independently assesses the answer and identifies issues.
-- Evaluation feedback is passed back to the Generator to improve subsequent attempts.
-- The loop is limited to four iterations to control execution time and API costs.
-- If the answer is not accepted within the iteration limit, the latest answer is returned with a warning that it has not been validated.
-
-### 2. Isolated Agent Memories
-
-`GeneratorMemory` and `EvaluatorMemory` are implemented as independent classes.
-
-Each agent maintains its own memory, namespaced by `session_id`. This ensures that their states remain isolated and that the Generator's working memory is not directly shared with the Evaluator.
-
-### 3. Redis Caching
-
-Redis provides a caching layer to reduce redundant computation and improve response times.
-
-The caching system supports:
-
-- **Embedding Cache:** Caches embeddings using text hashes to avoid repeatedly embedding identical text.
-- **Retrieval Cache:** Caches retrieval results to avoid unnecessary vector database queries.
-- **Cache Invalidation:** Invalidates affected cached data when knowledge sources are added or deleted.
-
-### 4. Graceful Refusal
-
-Grounded answers are a core design principle.
-
-If the vector database returns no relevant context, the system immediately returns a refusal response without calling the LLM. This prevents unsupported answers and avoids unnecessary API costs.
-
-### 5. Bounded Execution
-
-The evaluation loop has a strict maximum of four iterations. This prevents infinite loops and limits token consumption, execution time, and API expenses.
-
-If the maximum iteration count is reached without acceptance, the system returns the latest answer with a validation warning.
-
-## 🔒 Reliability and Grounding
-
-The platform is designed to improve answer reliability through:
-
-- Context-grounded generation.
-- Explicit refusal when relevant context is unavailable.
-- Independent answer evaluation.
-- Iterative feedback and answer refinement.
-- A bounded evaluation loop.
-- Session-specific agent memories.
-- Caching and invalidation strategies for retrieval efficiency.
-
-**Important:** Evaluation improves answer quality but does not guarantee factual correctness. An answer is considered validated only when it satisfies the configured evaluation criteria.
-
-## 📌 Future Improvements
-
-Potential areas for further development include:
-
-- Adding structured evaluation outputs with explicit scoring thresholds.
-- Improving retrieval quality through reranking and metadata filtering.
-- Tracking evaluation metrics across multiple questions and sessions.
-- Adding automated tests for retrieval, caching, and evaluation-loop behavior.
-- Supporting additional LLM providers.
-- Improving observability with structured logs and execution traces.
-- Adding more ingestion formats and advanced code-aware chunking strategies.
-
-## 📄 License
-
-Add your preferred license here, such as MIT, if applicable.
+For Intel-based Macs, the project pins `numpy<2` and `torch==2.2.2` in `pyproject.toml` for compatibility.
