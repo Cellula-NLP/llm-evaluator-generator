@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Ask</h1>
+<div style="display: flex; justify-content: space-between; align-items: center;">
+  <h1>Ask</h1>
+  <button id="clear-chat" style="background: #e53e3e; margin: 0;">Clear Chat</button>
+</div>
+
 <form id="ask-form">
   <textarea name="question" rows="3" placeholder="Ask a question..." required></textarea>
   <button type="submit">Ask</button>
 </form>
 
-<!-- Container for the chat history -->
 <div id="history" style="margin-top: 2rem;"></div>
 
-<!-- Markdown parser and sanitizer -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.9/dist/purify.min.js"></script>
 
@@ -22,80 +24,142 @@ const renderMd = (text) => {
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+const historyDiv = document.getElementById('history');
+
+// --- FIX 2: LocalStorage Persistence ---
+function loadHistory() {
+  const saved = localStorage.getItem('chat_history');
+  if (saved) {
+    historyDiv.innerHTML = saved;
+  }
+}
+
+function saveHistory() {
+  localStorage.setItem('chat_history', historyDiv.innerHTML);
+}
+
+document.getElementById('clear-chat').addEventListener('click', () => {
+  localStorage.removeItem('chat_history');
+  historyDiv.innerHTML = '';
+});
+
+loadHistory(); // Load on page start
+
+// --- FIX 1 & 3: Streaming & Error Handling ---
 document.getElementById('ask-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const question = e.target.question.value;
-  const historyDiv = document.getElementById('history');
+  e.target.reset();
 
-  // Create a new block for this QA pair
+  // Create UI block
   const block = document.createElement('div');
   block.className = 'qa-block';
   block.innerHTML = `
     <div class="user-q"><strong>Q:</strong> ${esc(question)}</div>
-    <div class="bot-a"><em>Thinking…</em></div>
+    <div class="bot-a">
+      <div class="status" style="color: #666; font-style: italic;">Thinking…</div>
+      <div class="final-answer" style="display: none;"></div>
+      <details style="display: none; margin-top: 1rem;">
+        <summary>Inspect Evaluator Loop</summary>
+        <div class="inspector-content"></div>
+      </details>
+    </div>
   `;
-
-  // Prepend so the newest is at the top
   historyDiv.prepend(block);
-  e.target.reset();
+  saveHistory();
+
+  const statusDiv = block.querySelector('.status');
+  const finalDiv = block.querySelector('.final-answer');
+  const detailsTag = block.querySelector('details');
+  const inspectorContent = block.querySelector('.inspector-content');
 
   try {
-    const res = await fetch('/api/query', {
+    const res = await fetch('/api/query/stream', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ question: question })
     });
 
-    if (!res.ok) throw new Error("API Error");
-    const data = await res.json();
-
-    // Build the Answer section
-    const tags = [];
-    if (data.refusal) tags.push('refusal');
-    tags.push(data.validated ? 'validated' : 'NOT validated');
-    if (data.grounded) tags.push('grounded');
-    if (data.cache_hit) tags.push('cache-hit');
-    tags.push('iterations: ' + data.iterations);
-
-    let botHtml = `<div class="md-content">${renderMd(data.answer)}</div>`;
-    botHtml += `<div class="badges">${tags.join(' | ')}</div>`;
-
-    if (data.warning) {
-      botHtml += `<p class="warning">⚠ ${data.warning}</p>`;
+    // FIX 3: Catch backend errors gracefully
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = errData.error?.message || `Server Error (${res.status})`;
+      throw new Error(msg);
     }
 
-    // Build the Loop Inspector (inside a collapsible <details> tag)
-    let inspectorHtml = '<details><summary>Inspect Evaluator Loop</summary>';
-    inspectorHtml += '<div class="inspector-content">';
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let finalData = null;
 
-    (data.trace || []).forEach(t => {
-      const ev = t.evaluation;
-      inspectorHtml += `<div class="iteration">`;
-      inspectorHtml += `<h3>Iteration ${t.iteration}</h3>`;
-      inspectorHtml += `<div class="md-content">${renderMd(t.answer)}</div>`;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
 
-      if (ev) {
-        inspectorHtml += `
-          <p style="margin-top: 1rem;"><strong>Verdict:</strong> ${ev.is_acceptable ? 'Acceptable' : 'Needs improvement'}</p>
-          <p>Scores — accuracy ${ev.accuracy}/5 · relevance ${ev.relevance}/5 · completeness ${ev.completeness}/5 · consistency ${ev.consistency_with_sources}/5</p>
-          <p>Grounded: ${ev.grounded}</p>
-        `;
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n\n');
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = JSON.parse(line.slice(6));
+
+        if (payload.event === 'status') {
+          statusDiv.textContent = payload.data.message;
+        }
+        else if (payload.event === 'iteration') {
+          const t = payload.data;
+          const ev = t.evaluation;
+
+          if (!detailsTag.style.display || detailsTag.style.display === 'none') {
+            detailsTag.style.display = 'block';
+          }
+
+          let iterHtml = `<div class="iteration">
+            <h3>Iteration ${t.iteration}</h3>
+            <div class="md-content">${renderMd(t.answer)}</div>
+            <p style="margin-top: 1rem;"><strong>Verdict:</strong> ${ev.is_acceptable ? 'Acceptable' : 'Needs improvement'}</p>
+            <p>Scores — acc ${ev.accuracy}/5 · rel ${ev.relevance}/5 · comp ${ev.completeness}/5</p>
+          `;
+          if (t.feedback) {
+            iterHtml += `<div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee;">
+                           <strong>Feedback:</strong>
+                           <div class="md-content">${renderMd(t.feedback)}</div>
+                         </div>`;
+          }
+          iterHtml += `</div>`;
+
+          inspectorContent.insertAdjacentHTML('beforeend', iterHtml);
+          saveHistory();
+        }
+        else if (payload.event === 'final') {
+          finalData = payload.data;
+        }
       }
-      if (t.feedback) {
-        inspectorHtml += `<div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #eee;">
-                            <strong>Feedback:</strong>
-                            <div class="md-content">${renderMd(t.feedback)}</div>
-                          </div>`;
-      }
-      inspectorHtml += `</div>`;
-    });
-    inspectorHtml += '</div></details>';
+    }
 
-    // Replace "Thinking..." with the actual answer
-    block.querySelector('.bot-a').innerHTML = botHtml + inspectorHtml;
+    // Render Final Answer
+    if (finalData) {
+      statusDiv.style.display = 'none';
+      finalDiv.style.display = 'block';
+
+      const tags = [];
+      if (finalData.refusal) tags.push('refusal');
+      tags.push(finalData.validated ? 'validated' : 'NOT validated');
+      if (finalData.grounded) tags.push('grounded');
+      tags.push('iterations: ' + finalData.iterations);
+
+      let html = `<div class="md-content">${renderMd(finalData.answer)}</div>`;
+      html += `<div class="badges">${tags.join(' | ')}</div>`;
+      if (finalData.warning) html += `<p class="warning">⚠ ${finalData.warning}</p>`;
+
+      finalDiv.innerHTML = html;
+      saveHistory();
+    }
 
   } catch (error) {
-    block.querySelector('.bot-a').innerHTML = '<p class="warning">⚠ An error occurred connecting to the server.</p>';
+    statusDiv.style.display = 'none';
+    finalDiv.style.display = 'block';
+    finalDiv.innerHTML = `<p class="warning" style="color: red; font-weight: bold;">⚠ Error: ${esc(error.message)}</p>`;
+    saveHistory();
   }
 });
 </script>
